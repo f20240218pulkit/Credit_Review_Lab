@@ -14,14 +14,14 @@
     <div class="eyebrow">SME lending workbench</div>
     <h1>Review the numbers.<br>Trace the evidence.</h1>
     <p>Build a two-period financial spread, reconcile exceptions against source statements, and retain the evidence behind each credit memo.</p>
-    <div id="launchers" class="controls"></div>
+    <div id="launchers" class="controls"><!-- demo-launchers --></div>
   </section>
   <section class="toolbar">
-    <label>Saved workspace <select id="cases"><option value="">Choose a case</option></select></label>
-    <form id="upload" class="controls">
+    <label>Saved workspace <select id="cases" disabled><option value="">Choose a case</option></select></label>
+    <form id="upload" class="controls" data-upload-mode>
       <label>Borrower <input name="borrower" required maxlength="80" placeholder="Borrower name"></label>
       <label>Statement pack <input name="pdf" required type="file" accept="application/pdf"></label>
-      <button>Upload PDF</button>
+      <button id="upload-submit" disabled>Upload PDF</button>
     </form>
   </section>
   <p id="notice" role="status" aria-live="polite"></p>
@@ -55,7 +55,7 @@
       </section>
       <section class="panel">
         <h3>Statement versions</h3>
-        <form id="replacement" class="controls">
+        <form id="replacement" class="controls" data-upload-mode>
           <label>Replacement pack <input name="pdf" type="file" accept="application/pdf" required></label>
           <button>Upload revision</button>
         </form>

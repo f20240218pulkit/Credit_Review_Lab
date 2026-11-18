@@ -46,7 +46,10 @@ jobs:
           else
             python -m playwright install chromium
           fi
-      - run: |
+      - name: Verify public startup and review flow
+        env:
+          CREDIT_PUBLIC_DEMO: "1"
+        run: |
           python -m uvicorn credit_review.api:app > /tmp/credit-review.log 2>&1 &
           server=$!
           trap 'kill "$server"; cat /tmp/credit-review.log' EXIT

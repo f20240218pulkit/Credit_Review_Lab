@@ -4,8 +4,23 @@ from playwright.sync_api import expect, sync_playwright
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(channel=os.environ.get("CREDIT_CHROME_CHANNEL"))
+    url = os.environ.get("CREDIT_TEST_URL", "http://127.0.0.1:8000")
+    initial = browser.new_page(java_script_enabled=False)
+    initial.goto(url)
+    expect(initial.get_by_role("button", name="Try Meridian Packaging")).to_be_visible()
+    upload_visible = os.environ.get("CREDIT_PUBLIC_DEMO") != "1"
+    assert initial.locator("#upload").is_visible() == upload_visible
+    initial_layout = [initial.locator(selector).bounding_box() for selector in ("#intro", ".toolbar", "#cases")]
+    initial.close()
+
     page = browser.new_page()
-    page.goto(os.environ.get("CREDIT_TEST_URL", "http://127.0.0.1:8000"))
+    startup_requests = []
+    page.on("request", lambda request: startup_requests.append(request.url))
+    page.goto(url)
+    expect(page.get_by_role("button", name="Try Meridian Packaging")).to_be_enabled()
+    assert page.locator("#upload").is_visible() == upload_visible
+    assert [page.locator(selector).bounding_box() for selector in ("#intro", ".toolbar", "#cases")] == initial_layout
+    assert not any(url.endswith(("/cases", "/settings")) for url in startup_requests)
     page.get_by_role("button", name="Try Meridian Packaging").click()
     expect(page.locator("#case-name")).to_have_text("Meridian Packaging")
     expect(page.locator("#cases")).not_to_have_value("")

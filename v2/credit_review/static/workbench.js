@@ -200,11 +200,7 @@ get("memo").addEventListener("submit", event => {
   });
 });
 
-act(async () => {
-  await refreshCases();
-  const cases = await request("/cases");
-  get("launchers").innerHTML = cases.map(item => '<button type="button" data-demo="' + escape(item.id) +
-    '">Try ' + escape(item.name) + '</button>').join("");
-  const settings = await request("/settings");
-  get("upload").hidden = get("replacement").hidden = !settings.uploads;
+act(refreshCases).finally(() => {
+  get("launchers").querySelectorAll("button").forEach(button => { button.disabled = false; });
+  get("upload-submit").disabled = false;
 });

@@ -1,4 +1,5 @@
 from copy import deepcopy
+from html import escape
 import json
 import os
 from pathlib import Path
@@ -6,7 +7,7 @@ from secrets import token_urlsafe
 from uuid import uuid4
 
 from fastapi import HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import pymupdf
@@ -23,6 +24,7 @@ def public_demo():
 
 
 STATIC = Path(__file__).with_name("static")
+HOME_TEMPLATE = Path(__file__).with_name("workspace.html").read_text(encoding="utf-8")
 LAYOUTS = {"CR-101": 0, "CR-102": 1, "CR-103": 2}
 
 
@@ -51,9 +53,15 @@ def session(request, response):
 def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
     app.mount("/assets", StaticFiles(directory=STATIC), name="assets")
 
-    @app.get("/", include_in_schema=False)
+    launchers = "".join(
+        f'<button type="button" data-demo="{escape(case_id)}" disabled>Try {escape(case["name"])}</button>'
+        for case_id, case in cases.items()
+    )
+    homepage = HOME_TEMPLATE.replace("<!-- demo-launchers -->", launchers)
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     def home():
-        return FileResponse(STATIC / "index.html")
+        return homepage.replace(" data-upload-mode", " hidden" if public_demo() else "")
 
     @app.get("/settings")
     def settings():

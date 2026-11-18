@@ -103,3 +103,14 @@ class WorkspaceTests(unittest.TestCase):
     def test_frontend_assets(self):
         self.assertIn("Review the numbers", self.client.get("/").text)
         self.assertIn("showEvidence", self.client.get("/assets/workbench.js").text)
+
+
+    def test_homepage_controls_match_upload_policy_before_javascript(self):
+        for public, hidden in [("0", ""), ("1", " hidden")]:
+            with self.subTest(public=public), patch.dict(
+                    "os.environ", {"CREDIT_PUBLIC_DEMO": public, "VERCEL": "0"}):
+                html = self.client.get("/").text
+                self.assertIn("Try Meridian Packaging</button>", html)
+                self.assertIn('id="cases" disabled', html)
+                for form_id in ("upload", "replacement"):
+                    self.assertIn(f'id="{form_id}" class="controls"{hidden}>', html)
