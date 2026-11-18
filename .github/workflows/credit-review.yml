@@ -9,6 +9,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     defaults:
       run:
         working-directory: v2
@@ -20,7 +21,13 @@ jobs:
       - run: pip install -r requirements-dev.txt playwright
       - run: python -m unittest discover -s tests -v
       - run: python benchmark.py
-      - run: python -m playwright install --with-deps chromium
+      - name: Prepare Chromium
+        run: |
+          if command -v google-chrome >/dev/null; then
+            echo CREDIT_CHROME_CHANNEL=chrome >> "$GITHUB_ENV"
+          else
+            python -m playwright install chromium
+          fi
       - run: |
           python -m uvicorn credit_review.api:app > /tmp/credit-review.log 2>&1 &
           server=$!

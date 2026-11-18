@@ -3,7 +3,7 @@ import os
 from playwright.sync_api import expect, sync_playwright
 
 with sync_playwright() as playwright:
-    browser = playwright.chromium.launch()
+    browser = playwright.chromium.launch(channel=os.environ.get("CREDIT_CHROME_CHANNEL"))
     page = browser.new_page()
     page.goto(os.environ.get("CREDIT_TEST_URL", "http://127.0.0.1:8000"))
     page.get_by_role("button", name="Try Meridian Packaging").click()

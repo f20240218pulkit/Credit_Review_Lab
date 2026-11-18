@@ -36,10 +36,14 @@ function notice(message, error = false) {
 async function act(operation) {
   if (busy) return;
   busy = true;
+  get("cases").disabled = true;
   notice("");
   try { await operation(); }
   catch (error) { notice(error.message, true); }
-  finally { busy = false; }
+  finally {
+    busy = false;
+    get("cases").disabled = false;
+  }
 }
 
 async function refreshCases() {
