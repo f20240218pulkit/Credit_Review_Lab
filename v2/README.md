@@ -65,6 +65,6 @@ The container defaults to public demo mode with uploaded PDFs disabled. Use one 
 
 ## Deploy v2 on Vercel
 
-Import the repository into a separate Vercel project for v2. Set **Root Directory** to `v2`, use the **FastAPI** framework preset, and clear any static build or output overrides. Vercel discovers `app.py` in that directory. Connect a Postgres database and expose its connection string as `DATABASE_URL` or `CREDIT_DATABASE_URL` in the production environment before deploying. The connection role needs to create the initial tables in its database. Never commit the connection string.
+Import the repository into Vercel. Both the repository root (the default) and `v2` deploy the v2 FastAPI app. Clear any static build or output overrides. The selected directory configures FastAPI and provides its `app.py` entry point. Connect a Postgres database and expose its connection string as `DATABASE_URL` or `CREDIT_DATABASE_URL` in the production environment before deploying. The connection role needs to create the initial tables in its database. Never commit the connection string.
 
 Vercel deployments use durable Postgres storage, HTTPS-only session cookies, and synthetic cases only. The container and local setup can still use SQLite. Once deployed, open `/`, choose **Try Meridian Packaging**, and reload after saving a review to verify that the case persists.
