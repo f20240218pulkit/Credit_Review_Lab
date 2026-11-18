@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 
 import pymupdf
@@ -10,7 +9,7 @@ from pydantic import BaseModel, Field, TypeAdapter, model_validator
 
 from .documents import MAX_BYTES, extract_rows, make_demo_pdf
 from .engine import Mapper, Review, SourceRow, analyse
-from .web import register_workspace
+from .web import public_demo, register_workspace
 
 DEMO = json.loads(Path(__file__).with_name("demo.json").read_text(encoding="utf-8"))
 CASES = {case["id"]: case for case in DEMO["cases"]}
@@ -85,7 +84,7 @@ def demo_statement(case_id: str):
 
 @app.post("/extract")
 async def extract_statement(request: Request):
-    if os.environ.get("CREDIT_PUBLIC_DEMO") == "1":
+    if public_demo():
         raise HTTPException(403, "Uploads are available in the local workspace")
     return await run_in_threadpool(parse_pdf, await read_pdf(request))
 

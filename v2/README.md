@@ -62,3 +62,9 @@ docker run --rm -p 8000:8000 -v credit-review-data:/app/data credit-review-lab
 ```
 
 The container defaults to public demo mode with uploaded PDFs disabled. Use one instance with a persistent volume. Set `CREDIT_SECURE_COOKIE=1` when serving behind HTTPS. The local upload mode is for a trusted local operator and sample data. Multi-tenant production accounts, PostgreSQL, object storage, asynchronous extraction jobs, independently sourced layout evaluation and OCR are outside this release.
+
+## Deploy v2 on Vercel
+
+Import the repository into a separate Vercel project for v2. Set **Root Directory** to `v2`, use the **FastAPI** framework preset, and clear any static build or output overrides. Vercel discovers `app.py` in that directory. Connect a Postgres database and expose its connection string as `DATABASE_URL` or `CREDIT_DATABASE_URL` in the production environment before deploying. The connection role needs to create the initial tables in its database. Never commit the connection string.
+
+Vercel deployments use durable Postgres storage, HTTPS-only session cookies, and synthetic cases only. The container and local setup can still use SQLite. Once deployed, open `/`, choose **Try Meridian Packaging**, and reload after saving a review to verify that the case persists.

@@ -1,6 +1,7 @@
 """Persistent, single-user workspaces isolated by a browser session capability."""
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from functools import lru_cache
 import json
 import os
 from pathlib import Path
@@ -37,6 +38,13 @@ def as_json(data):
 
 @contextmanager
 def database(write=False):
+    url = os.environ.get("CREDIT_DATABASE_URL") or os.environ.get("DATABASE_URL")
+    if url:
+        with postgres_database(url, write) as db:
+            yield db
+        return
+    if os.environ.get("VERCEL") == "1":
+        raise HTTPException(503, "Set CREDIT_DATABASE_URL or DATABASE_URL to enable the Vercel workspace")
     path = Path(os.environ.get("CREDIT_DB", "data/credit-review.sqlite3"))
     path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(path, timeout=10)
@@ -49,6 +57,40 @@ def database(write=False):
             yield db
     finally:
         db.close()
+
+
+class PostgresConnection:
+    def __init__(self, connection):
+        self.connection = connection
+
+    def execute(self, query, params=()):
+        return self.connection.execute(query.replace("?", "%s"), params)
+
+
+@lru_cache(maxsize=4)
+def init_postgres(url):
+    import psycopg
+
+    schema = SCHEMA.replace("id TEXT PRIMARY KEY, owner",
+                            "rowid BIGINT GENERATED ALWAYS AS IDENTITY, id TEXT PRIMARY KEY, owner")
+    with psycopg.connect(url, connect_timeout=10) as db:
+        db.execute("SELECT pg_advisory_xact_lock(62479301)")
+        for statement in schema.replace("BLOB", "BYTEA").split(";"):
+            if statement.strip():
+                db.execute(statement)
+
+
+@contextmanager
+def postgres_database(url, write):
+    import psycopg
+
+    init_postgres(url)
+    with psycopg.connect(url, connect_timeout=10) as db:
+        if write:
+            # SQLite serializes writes at the database level. Use the same
+            # contract here so revision checks and writes are atomic.
+            db.execute("SELECT pg_advisory_xact_lock(62479302)")
+        yield PostgresConnection(db)
 
 
 def load_case(db, owner, case_id):
@@ -80,7 +122,7 @@ def view(state, mapper):
 
 def save_document(db, case_id, rows, pdf):
     doc_id = rows[0].document
-    db.execute("INSERT OR IGNORE INTO documents VALUES (?, ?, ?)", (case_id, doc_id, pdf))
+    db.execute("INSERT INTO documents (case_id, id, pdf) VALUES (?, ?, ?) ON CONFLICT (case_id, id) DO NOTHING", (case_id, doc_id, pdf))
     return doc_id
 
 
@@ -89,7 +131,7 @@ def create_case(db, owner, name, pdf, rows, demo=None):
     if len(years) != 2:
         raise HTTPException(422, "A workspace needs a statement pack with two reporting years")
     case_id = uuid4().hex
-    db.execute("INSERT INTO cases VALUES (?, ?, ?)", (case_id, owner, "{}"))
+    db.execute("INSERT INTO cases (id, owner, state) VALUES (?, ?, ?)", (case_id, owner, "{}"))
     doc_id = save_document(db, case_id, rows, pdf)
     state = {"id": case_id, "name": name, "demo": demo, "years": years, "revision": 1,
              "document": doc_id, "versions": [{"document": doc_id, "at": now()}],

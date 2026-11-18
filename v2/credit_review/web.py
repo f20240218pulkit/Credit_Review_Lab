@@ -18,6 +18,10 @@ from .memos import cash_scenario, memo_pdf
 from . import workspace as work
 
 COOKIE = "credit_workspace"
+def public_demo():
+    return os.environ.get("VERCEL") == "1" or os.environ.get("CREDIT_PUBLIC_DEMO") == "1"
+
+
 STATIC = Path(__file__).with_name("static")
 LAYOUTS = {"CR-101": 0, "CR-102": 1, "CR-103": 2}
 
@@ -40,7 +44,7 @@ def session(request, response):
     token = owner(request) or token_urlsafe(32)
     if not owner(request):
         response.set_cookie(COOKIE, token, httponly=True, samesite="strict",
-                            secure=os.environ.get("CREDIT_SECURE_COOKIE") == "1", max_age=30 * 86400)
+                            secure=os.environ.get("VERCEL") == "1" or os.environ.get("CREDIT_SECURE_COOKIE") == "1", max_age=30 * 86400)
     return token
 
 
@@ -53,7 +57,7 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
 
     @app.get("/settings")
     def settings():
-        return {"uploads": os.environ.get("CREDIT_PUBLIC_DEMO") != "1"}
+        return {"uploads": not public_demo()}
 
     @app.get("/health")
     def health():
@@ -81,7 +85,7 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
 
     @app.post("/workspace/upload", status_code=201)
     async def upload(request: Request, response: Response, name: str = Query(min_length=1, max_length=80)):
-        if os.environ.get("CREDIT_PUBLIC_DEMO") == "1":
+        if public_demo():
             raise HTTPException(403, "Uploads are available in the local workspace")
         token = session(request, response)
         pdf = await read_pdf(request)
@@ -111,7 +115,7 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
     @app.post("/workspace/{case_id}/replacement")
     async def replace(case_id: str, request: Request, revision: int, demo: bool = False):
         token = owner(request)
-        if not demo and os.environ.get("CREDIT_PUBLIC_DEMO") == "1":
+        if not demo and public_demo():
             raise HTTPException(403, "Uploads are available in the local workspace")
         with work.database() as db:
             state = work.load_case(db, token, case_id)
