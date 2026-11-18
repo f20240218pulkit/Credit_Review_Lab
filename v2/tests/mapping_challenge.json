@@ -1,0 +1,78 @@
+[
+  [
+    "Annual operating turnover",
+    "revenue"
+  ],
+  [
+    "Core operating sales",
+    "revenue"
+  ],
+  [
+    "Reported EBITDA",
+    "ebitda"
+  ],
+  [
+    "Total current assets",
+    "current_assets"
+  ],
+  [
+    "Current liabilities subtotal",
+    "current_liabilities"
+  ],
+  [
+    "Grand total assets",
+    "assets"
+  ],
+  [
+    "Total external liabilities reported",
+    "liabilities"
+  ],
+  [
+    "Owners’ total equity",
+    "equity"
+  ],
+  [
+    "Interest bearing borrowings",
+    "debt"
+  ],
+  [
+    "Net operating cash flow",
+    "operating_cash"
+  ],
+  [
+    "Scheduled debt service",
+    "debt_service"
+  ],
+  [
+    "Intercompany memo",
+    null
+  ],
+  [
+    "Closing remarks",
+    null
+  ],
+  [
+    "Result before allocations",
+    null
+  ],
+  [
+    "Outstanding disputes",
+    null
+  ],
+  [
+    "Employee training provision",
+    null
+  ],
+  [
+    "Sales and marketing expenses",
+    null
+  ],
+  [
+    "Noncurrent asset total",
+    null
+  ],
+  [
+    "EBITDA margin percentage",
+    null
+  ]
+]

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Credit Review Lab</title>
+<link rel="stylesheet" href="/assets/style.css">
+<script type="module" src="/assets/workbench.js"></script>
+</head>
+<body>
+<header><div class="brand">Credit Review Lab</div><a href="/docs">API reference</a></header>
+<main>
+  <section id="intro" class="intro">
+    <div class="eyebrow">SME lending workbench</div>
+    <h1>Review the numbers.<br>Trace the evidence.</h1>
+    <p>Build a two-period financial spread, reconcile exceptions against source statements, and retain the evidence behind each credit memo.</p>
+    <div id="launchers" class="controls"></div>
+  </section>
+  <section class="toolbar">
+    <label>Saved workspace <select id="cases"><option value="">Choose a case</option></select></label>
+    <form id="upload" class="controls">
+      <label>Borrower <input name="borrower" required maxlength="80" placeholder="Borrower name"></label>
+      <label>Statement pack <input name="pdf" required type="file" accept="application/pdf"></label>
+      <button>Upload PDF</button>
+    </form>
+  </section>
+  <p id="notice" role="status" aria-live="polite"></p>
+  <div id="workspace" hidden>
+    <div class="case-header"><div><div id="case-meta" class="eyebrow"></div><h2 id="case-name"></h2></div><span id="case-status" class="badge"></span></div>
+    <div id="metrics" class="metrics"></div>
+    <div class="grid">
+      <section class="panel" id="exceptions"></section>
+      <section class="panel" id="financials"></section>
+      <section class="panel" id="evidence">
+        <h3>Statement evidence</h3>
+        <p id="source-caption">Select a source line to inspect the statement.</p>
+        <img id="preview" alt="Original statement page with the cited line highlighted" hidden>
+        <a id="source-download" hidden>Download original PDF</a>
+        <form id="review" hidden>
+          <h4>Review source line</h4>
+          <label>Account <select name="account"></select></label>
+          <label>Reason <input name="reason" maxlength="500" required placeholder="Explain the evidence for this decision"></label>
+          <button>Save review</button>
+        </form>
+      </section>
+    </div>
+    <div class="secondary-grid">
+      <section class="panel">
+        <h3>Cash-flow stress</h3>
+        <form id="scenario" class="controls">
+          <label>Cash-flow decline (%) <input type="number" min="0" max="100" name="decline" value="15" required></label>
+          <button>Calculate</button>
+        </form>
+        <p id="scenario-result"></p>
+      </section>
+      <section class="panel">
+        <h3>Statement versions</h3>
+        <form id="replacement" class="controls">
+          <label>Replacement pack <input name="pdf" type="file" accept="application/pdf" required></label>
+          <button>Upload revision</button>
+        </form>
+        <button id="demo-replacement" class="outline" hidden>Load revised Meridian statement</button>
+        <div id="comparison"></div>
+      </section>
+      <section class="panel">
+        <h3>Credit memo snapshots</h3>
+        <form id="memo">
+          <label>Analyst commentary <textarea name="notes" maxlength="1800" rows="3"></textarea></label>
+          <button>Save memo snapshot</button>
+        </form>
+        <div id="snapshots"></div>
+      </section>
+      <section class="panel" id="history"></section>
+    </div>
+  </div>
+</main>
+</body>
+</html>
