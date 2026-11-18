@@ -68,3 +68,25 @@ The container defaults to public demo mode with uploaded PDFs disabled. Use one 
 Import the repository into Vercel. Both the repository root (the default) and `v2` deploy the v2 FastAPI app. Clear any static build or output overrides. The selected directory configures FastAPI and provides its `app.py` entry point. Connect a Postgres database and expose its connection string as `DATABASE_URL` or `CREDIT_DATABASE_URL` in the production environment before deploying. The connection role needs to create the initial tables in its database. Never commit the connection string.
 
 Vercel deployments use durable Postgres storage, HTTPS-only session cookies, and synthetic cases only. The container and local setup can still use SQLite. Once deployed, open `/`, choose **Try Meridian Packaging**, and reload after saving a review to verify that the case persists.
+
+### Enable email and Google sign-in
+
+The public demo can run without account configuration. Once Auth0 is configured, signing in unlocks statement uploads and replacements. Each workspace is tied to the verified provider account identifier. Guest workspaces stay in that browser's demo session, and signing in with two different providers creates separate workspaces.
+
+1. In Auth0, create a **Regular Web Application**. Enable an email/password Database connection and the **Google** social connection for that application. The default database connection name is `Username-Password-Authentication`. Configure the Google connection with your own OAuth credentials for public production use, and add `https://YOUR_AUTH0_DOMAIN/login/callback` as Google's authorized redirect URI.
+2. Set **Allowed Callback URLs** to `https://creditreviewlab-znz5.vercel.app/auth/callback` and **Allowed Logout URLs** to `https://creditreviewlab-znz5.vercel.app/`. Use the same production origin even if Vercel also provides deployment-specific URLs.
+3. Add these values to the Vercel project's **Production** environment:
+
+   | Name | Value |
+   | --- | --- |
+   | `AUTH0_DOMAIN` | Auth0 tenant hostname, with no scheme or slash |
+   | `AUTH0_CLIENT_ID` | Auth0 application Client ID |
+   | `AUTH0_CLIENT_SECRET` | Auth0 application Client Secret |
+   | `CREDIT_SESSION_SECRET` | A randomly generated secret, at least 32 characters. Generate one locally with `py -c "import secrets; print(secrets.token_urlsafe(48))"`. |
+   | `CREDIT_APP_ORIGIN` | `https://creditreviewlab-znz5.vercel.app` |
+   | `AUTH0_EMAIL_CONNECTION` | Optional override for a differently named email/password database connection |
+
+   Keep both secrets in Vercel's sensitive environment variables. Keep `DATABASE_URL` configured as before.
+4. Redeploy, open `/signin` on the production domain, and test both methods with test accounts. A successful sign-in shows **Sign out** and **Upload PDF**. The public demo remains available without an account.
+
+The local workspace still supports uploads without Auth0. The unauthenticated extraction API remains disabled on Vercel. Use synthetic statement packs for portfolio demonstrations.

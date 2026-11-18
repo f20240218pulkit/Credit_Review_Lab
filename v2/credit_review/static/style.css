@@ -5,3 +5,8 @@ body{margin:0}header{display:flex;justify-content:space-between;align-items:cent
 @media(max-width:720px){.grid,.secondary-grid{grid-template-columns:minmax(0,1fr)}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.toolbar{align-items:start}}
 
 #cases{width:min(100%, 240px)}
+
+.header-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.header-actions form{margin:0}
+.signin-option{padding:9px 12px;border-radius:7px;background:#fff;color:var(--green);font-weight:700}
+.intro p a{color:#fff}

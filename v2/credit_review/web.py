@@ -2,6 +2,7 @@ from copy import deepcopy
 from html import escape
 import json
 import os
+import re
 from pathlib import Path
 from secrets import token_urlsafe
 from uuid import uuid4
@@ -13,6 +14,7 @@ from pydantic import BaseModel, Field
 import pymupdf
 from starlette.concurrency import run_in_threadpool
 
+from .accounts import NO_STORE, account_owner, register_accounts
 from .documents import make_demo_pdf, serial_pdf
 from .engine import Review
 from .memos import cash_scenario, memo_pdf
@@ -39,7 +41,12 @@ class MemoRequest(BaseModel):
 
 
 def owner(request):
-    return request.cookies.get(COOKIE, "")
+    token = request.cookies.get(COOKIE, "")
+    return account_owner(request) or (token if re.fullmatch(r"[A-Za-z0-9_-]{43}", token) else "")
+
+
+def can_upload(request):
+    return not public_demo() or bool(account_owner(request))
 
 
 def session(request, response):
@@ -51,6 +58,7 @@ def session(request, response):
 
 
 def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
+    register_accounts(app)
     app.mount("/assets", StaticFiles(directory=STATIC), name="assets")
 
     launchers = "".join(
@@ -60,12 +68,17 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
     homepage = HOME_TEMPLATE.replace("<!-- demo-launchers -->", launchers)
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-    def home():
-        return homepage.replace(" data-upload-mode", " hidden" if public_demo() else "")
+    def home(request: Request):
+        account_action = (
+            '<form action="/auth/logout" method="post"><button type="submit">Sign out</button></form>'
+            if account_owner(request) else '<a href="/signin">Sign in</a>'
+        )
+        page = homepage.replace(" data-upload-mode", "" if can_upload(request) else " hidden")
+        return HTMLResponse(page.replace("<!-- account-action -->", account_action), headers=NO_STORE)
 
     @app.get("/settings")
-    def settings():
-        return {"uploads": not public_demo()}
+    def settings(request: Request):
+        return JSONResponse({"uploads": can_upload(request)}, headers=NO_STORE)
 
     @app.get("/health")
     def health():
@@ -93,8 +106,8 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
 
     @app.post("/workspace/upload", status_code=201)
     async def upload(request: Request, response: Response, name: str = Query(min_length=1, max_length=80)):
-        if public_demo():
-            raise HTTPException(403, "Uploads are available in the local workspace")
+        if not can_upload(request):
+            raise HTTPException(403, "Sign in to upload statement packs")
         token = session(request, response)
         pdf = await read_pdf(request)
 
@@ -123,8 +136,8 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
     @app.post("/workspace/{case_id}/replacement")
     async def replace(case_id: str, request: Request, revision: int, demo: bool = False):
         token = owner(request)
-        if not demo and public_demo():
-            raise HTTPException(403, "Uploads are available in the local workspace")
+        if not demo and not can_upload(request):
+            raise HTTPException(403, "Sign in to upload a replacement statement")
         with work.database() as db:
             state = work.load_case(db, token, case_id)
             work.check_revision(state, revision)
