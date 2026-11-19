@@ -88,10 +88,18 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
     def home(request: Request):
         account_action = (
             '<form action="/auth/logout" method="post"><input type="hidden" name="csrf" value="'
-            + csrf_token(csrf_key(request)) + '"><button type="submit">Sign out</button></form>'
-            if account_owner(request) else '<a href="/signin">Sign in</a>'
+            + csrf_token(csrf_key(request)) + '"><button class="button-secondary" type="submit">Sign out</button></form>'
+            if account_owner(request) else '<a class="button-link button-warm" href="/signin">Sign in</a>'
         )
-        page = homepage.replace(" data-upload-mode", "" if can_upload(request) else " hidden")
+        uploads_enabled = can_upload(request)
+        upload_access = (
+            '<div class="upload-access"><div><h3>Start your own review</h3>'
+            '<p>Sign in to upload a borrower statement pack.</p></div>'
+            '<a class="button-link button-warm" href="/signin">Sign in to upload</a></div>'
+            if not uploads_enabled else ""
+        )
+        page = homepage.replace(" data-upload-mode", "" if uploads_enabled else " hidden")
+        page = page.replace("<!-- upload-access -->", upload_access)
         return HTMLResponse(page.replace("<!-- account-action -->", account_action), headers=NO_STORE)
 
     @app.get("/settings")

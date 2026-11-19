@@ -80,12 +80,12 @@ async function refreshCases() {
 }
 
 function citations(ids, documentId = state.document) {
-  return ids.map(id => '<button class="source" type="button" data-row="' + escape(id) + '" data-doc="' +
+  return ids.map(id => '<button class="source" type="button" aria-controls="evidence" aria-pressed="false" data-row="' + escape(id) + '" data-doc="' +
     escape(documentId) + '">' + escape("p" + id.split("-").at(-2) + " · line " + id.split("-").at(-1)) +
     '</button>').join(" ");
 }
 
-function showEvidence(id, documentId) {
+function showEvidence(id, documentId, navigate = true) {
   const row = state.analysis.rows.find(item => item.id === id);
   const page = id.split("-").at(-2);
   selectedRow = row;
@@ -103,8 +103,18 @@ function showEvidence(id, documentId) {
     form.elements.account.value = row.account ?? "";
     form.elements.reason.value = row.review?.reason ?? "";
   }
-  if (!window.matchMedia("(min-width: 1111px)").matches)
-    get("evidence").scrollIntoView({block: "start"});
+  document.querySelectorAll(".source").forEach(button => {
+    button.setAttribute("aria-pressed", String(button.dataset.row === id && button.dataset.doc === documentId));
+  });
+  if (navigate) {
+    get("evidence-title").focus({preventScroll: true});
+    get("evidence-title").scrollIntoView({block: "nearest"});
+  }
+}
+
+function focusCase() {
+  get("case-name").focus({preventScroll: true});
+  get("workspace").scrollIntoView({block: "start"});
 }
 
 function render(next, preserveEvidence = false) {
@@ -117,15 +127,17 @@ function render(next, preserveEvidence = false) {
   get("case-meta").textContent = "FY" + prior.year + " / FY" + latest.year + " · Version " + state.versions.length;
   get("case-status").textContent = (state.analysis.provisional ? "Provisional · " : "Reviewed · ") +
     exceptions.length + " checks open";
+  get("case-status").toggleAttribute("data-provisional", state.analysis.provisional);
   get("metrics").innerHTML = Object.entries(latest.metrics).map(([key, item]) =>
-    '<div class="metric"><small>' + label(key) + '</small><strong>' + ratio(key, item.value) +
-    '</strong><small>FY' + prior.year + ' ' + ratio(key, prior.metrics[key].value) + '</small><div>' +
+    '<div class="metric"><span class="metric-name">' + label(key) + '</span><strong>' + ratio(key, item.value) +
+    '</strong><small>FY' + prior.year + ' ' + ratio(key, prior.metrics[key].value) + '</small><div class="metric-sources">' +
     citations(item.refs) + '</div></div>').join("");
-  get("exceptions").innerHTML = '<h3>Exceptions</h3>' + (exceptions.length ? exceptions.map(item =>
+  get("exceptions").toggleAttribute("data-has-exceptions", exceptions.length > 0);
+  get("exceptions").innerHTML = '<h3>Exceptions</h3>' + (exceptions.length ? '<div class="exception-list">' + exceptions.map(item =>
     '<div class="exception"><strong>FY' + item.year + ' · ' + escape(label(item.code)) + '</strong><div>' +
     escape(item.value ? money(item.value) : label(item.account ?? item.metric ?? "")) + '</div>' +
-    citations(item.refs) + '</div>').join("") : '<p>No reconciliation exceptions.</p>');
-  get("financials").innerHTML = '<h3>Financial spread</h3><div class="scroll"><table><thead><tr><th>Account</th><th>FY' +
+    citations(item.refs) + '</div>').join("") + '</div>' : '<p class="muted">No reconciliation exceptions.</p>');
+  get("financials").innerHTML = '<h3>Financial spread</h3><div class="scroll" role="region" aria-label="Financial spread table" tabindex="0"><table><thead><tr><th>Account</th><th>FY' +
     prior.year + '</th><th>FY' + latest.year + '</th></tr></thead><tbody>' + Object.keys(latest.accounts).map(key =>
     '<tr><th scope="row">' + label(key) + '</th>' + annual.map(period => {
       const item = period.accounts[key];
@@ -159,9 +171,9 @@ function render(next, preserveEvidence = false) {
   get("review").hidden = true;
   get("preview").hidden = true;
   get("source-download").hidden = true;
-  get("source-caption").textContent = "Select a source line to inspect the statement.";
+  get("source-caption").textContent = "Select a page or line reference to see it here.";
   selectedRow = undefined;
-  if (previousRow && rows.some(row => row.id === previousRow)) showEvidence(previousRow, state.document);
+  if (previousRow && rows.some(row => row.id === previousRow)) showEvidence(previousRow, state.document, false);
 }
 
 document.addEventListener("click", event => {
@@ -171,14 +183,14 @@ document.addEventListener("click", event => {
   else act(async () => {
     render(await request("/workspace/demo/" + button.dataset.demo, {method: "POST"}));
     await refreshCases();
-    get("workspace").scrollIntoView({block: "start"});
+    focusCase();
   }, button, "Opening demo…");
 });
 get("cases").addEventListener("change", event => {
   const caseId = event.target.value;
   if (caseId) act(async () => {
     render(await request("/workspace/" + encodeURIComponent(caseId)));
-    get("workspace").scrollIntoView({block: "start"});
+    focusCase();
   });
 });
 get("upload").addEventListener("submit", event => {
@@ -188,6 +200,7 @@ get("upload").addEventListener("submit", event => {
     render(await request("/workspace/upload?name=" + encodeURIComponent(form.elements.borrower.value), pdf(form.elements.pdf.files[0])));
     form.reset();
     await refreshCases();
+    focusCase();
   }, event.submitter, "Uploading PDF…");
 });
 get("review").addEventListener("submit", event => {
