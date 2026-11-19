@@ -28,6 +28,13 @@ def memo_pdf(snapshot):
         f'Created {snapshot["at"]} | Revision {snapshot["revision"]}',
         f'Statement SHA-256 {snapshot["document"]}',
     ]
+    sign_off = snapshot.get("sign_off")
+    if sign_off:
+        lines.extend([
+            f'Reviewer: {sign_off["name"]} | Signed off {sign_off["at"]}',
+            f'Input revision {sign_off["input_revision"]} | Formula version {analysis["formula_version"]}',
+            sign_off["notes"],
+        ])
     rows = {row["id"]: row for row in analysis["rows"]}
     for period in analysis["annual"]:
         lines.append(f'FY{period["year"]}')

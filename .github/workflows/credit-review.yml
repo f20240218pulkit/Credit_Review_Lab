@@ -55,3 +55,17 @@ jobs:
           trap 'kill "$server"; cat /tmp/credit-review.log' EXIT
           curl --retry 10 --retry-connrefused --retry-delay 1 --fail http://127.0.0.1:8000/health
           python tests/browser_smoke.py
+      - name: Verify team intake and sign-off in the browser
+        env:
+          CREDIT_PUBLIC_DEMO: "1"
+          CREDIT_PILOT_TEST_AUTH: "1"
+          CREDIT_PILOT_INVITE_ONLY: "1"
+          CREDIT_PILOT_ADMINS: owner@example.test
+          CREDIT_TEST_URL: http://127.0.0.1:8001
+        run: |
+          export CREDIT_DB="$(mktemp -d)/team-pilot.sqlite"
+          python -m uvicorn --app-dir tests pilot_browser_app:app --port 8001 > /tmp/credit-team.log 2>&1 &
+          server=$!
+          trap 'kill "$server"; cat /tmp/credit-team.log' EXIT
+          curl --retry 10 --retry-connrefused --retry-delay 1 --fail http://127.0.0.1:8001/ready
+          python tests/browser_pilot.py

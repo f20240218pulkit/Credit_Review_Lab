@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#080909">
 <title>Credit Review Lab</title>
-<link rel="stylesheet" href="/assets/style.css?v=3">
-<script type="module" src="/assets/workbench.js?v=3"></script>
+<link rel="stylesheet" href="/assets/style.css?v=4">
+<script type="module" src="/assets/workbench.js?v=4"></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to workspace</a>
@@ -17,7 +17,7 @@
       <span>Credit Review<span class="brand-accent"> Lab</span></span>
     </a>
     <nav class="header-actions" aria-label="Account and resources">
-      <a href="/docs">API reference</a>
+      <a href="/help">Help</a>
       <!-- account-action -->
     </nav>
   </div>
@@ -46,9 +46,51 @@
     <!-- upload-access -->
     <form id="upload" class="controls" data-upload-mode>
       <label>Borrower for new case <input name="borrower" required maxlength="80" placeholder="Borrower name"></label>
-      <label>Statement pack <input name="pdf" required type="file" accept="application/pdf"></label>
-      <button id="upload-submit" disabled>Upload PDF</button>
+      <label>Statement pack <input name="pdf" required type="file" accept="application/pdf,text/csv,.pdf,.csv"></label>
+      <label id="upload-team-choice" hidden>Save to
+        <select id="upload-organization" name="organization"><option value="">Personal workspace</option></select>
+      </label>
+      <button id="upload-submit" disabled>Upload statements</button>
     </form>
+  </section>
+  <section id="invite-panel" class="panel pilot-panel" hidden>
+    <h3>Team invitation</h3>
+    <p id="invite-message"></p>
+    <a id="invite-sign-in" class="button-link" href="/signin" hidden>Sign in to accept</a>
+    <button id="accept-invite" type="button" hidden>Accept invitation</button>
+  </section>
+  <details id="team-tools" class="panel pilot-panel" hidden>
+    <summary>Team settings</summary>
+    <form id="create-team" class="controls">
+      <label>New team name <input name="name" maxlength="100" required></label>
+      <button type="submit">Create team</button>
+    </form>
+    <form id="invite-member" class="controls" hidden>
+      <label>Team <select id="invite-team" required></select></label>
+      <label>Invitee name <input name="member_name" maxlength="100" required></label>
+      <label>Verified email <input type="email" name="email" maxlength="254" required></label>
+      <label>Role <select name="role"><option value="analyst">Analyst</option><option value="reviewer">Reviewer</option></select></label>
+      <button type="submit">Generate invitation</button>
+    </form>
+    <div id="team-members" hidden></div>
+    <p id="team-intake"></p>
+    <label id="invite-result" hidden>Single-use invitation link (expires in 48 hours)
+      <input id="invite-link" readonly>
+    </label>
+  </details>
+  <section id="intake-status" class="panel pilot-panel" hidden>
+    <h3>Statement processing</h3>
+    <p id="intake-progress" role="status"></p>
+    <button id="intake-open" class="button-secondary" type="button" hidden>Open processed case</button>
+    <button id="intake-resume" class="button-secondary" type="button" hidden>Check processing status</button>
+  </section>
+  <section id="case-inbox" class="panel pilot-panel" hidden>
+    <h3>Case inbox</h3>
+    <div class="controls">
+      <label>Find a case <input id="case-search" type="search" placeholder="Borrower or status"></label>
+      <label><input id="show-archived" type="checkbox"> Show archived cases</label>
+    </div>
+    <div id="inbox-results"></div>
   </section>
   <p id="notice" role="status" aria-live="polite"></p>
   <section id="workspace" aria-labelledby="case-name" hidden>
@@ -56,6 +98,19 @@
       <div><div id="case-meta" class="eyebrow"></div><h2 id="case-name" tabindex="-1"></h2></div>
       <span id="case-status" class="badge"></span>
     </div>
+    <section id="review-workflow" class="panel pilot-panel" hidden>
+      <h3>Team review</h3>
+      <p id="workflow-status"></p>
+      <form id="workflow-form" class="controls" hidden>
+        <label id="reviewer-choice" hidden>Assign reviewer <select id="assigned-reviewer" name="reviewer"></select></label>
+        <label>Review notes <textarea name="notes" rows="2" maxlength="1800"></textarea></label>
+        <button type="submit" value="submit" hidden>Send for review</button>
+        <button type="submit" value="request_changes" class="button-secondary" hidden>Request changes</button>
+        <button type="submit" value="sign_off" hidden>Sign off evidence</button>
+        <button type="submit" value="recall" class="button-secondary" hidden>Recall review</button>
+      </form>
+    </section>
+    <button id="archive-case" class="button-secondary pilot-panel" type="button" hidden>Archive case</button>
     <div id="metrics" class="metrics" aria-label="Key financial metrics"></div>
     <nav class="case-nav" aria-label="Case sections">
       <a href="#financials">Financial spread</a>
@@ -74,6 +129,7 @@
         <p id="source-caption" aria-live="polite">Select a page or line reference to see it here.</p>
         <img id="preview" alt="Original statement page with the cited line highlighted" hidden>
         <a id="source-download" class="button-link button-secondary" hidden>Download original PDF</a>
+        <a id="original-csv" class="button-link button-secondary" hidden>Download uploaded CSV</a>
         <form id="review" hidden>
           <h4>Review source line</h4>
           <label>Account <select name="account"></select></label>
@@ -94,7 +150,7 @@
       <section class="panel" id="versions">
         <h3>Statement versions</h3>
         <form id="replacement" class="controls" data-upload-mode>
-          <label>Replacement pack <input name="pdf" type="file" accept="application/pdf" required></label>
+          <label>Replacement pack <input name="pdf" type="file" accept="application/pdf,text/csv,.pdf,.csv" required></label>
           <button class="button-secondary">Upload revision</button>
         </form>
         <button id="demo-replacement" class="button-secondary" hidden>Load revised Meridian statement</button>
