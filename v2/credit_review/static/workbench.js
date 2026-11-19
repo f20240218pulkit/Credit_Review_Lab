@@ -33,24 +33,42 @@ function notice(message, error = false) {
   item.toggleAttribute("data-error", error);
 }
 
-async function act(operation) {
+async function act(operation, button, pendingLabel) {
   if (busy) return;
   busy = true;
-  get("cases").disabled = true;
+  const cases = get("cases");
+  const buttonLabel = button?.textContent;
+  cases.disabled = true;
+  if (button) {
+    button.setAttribute("aria-busy", "true");
+    button.setAttribute("aria-disabled", "true");
+    button.textContent = pendingLabel;
+  }
   notice("");
   try { await operation(); }
   catch (error) { notice(error.message, true); }
   finally {
+    if (button) {
+      button.textContent = buttonLabel;
+      button.removeAttribute("aria-busy");
+      button.removeAttribute("aria-disabled");
+    }
+    cases.value = state?.id ?? "";
+    cases.disabled = cases.options.length < 2;
     busy = false;
-    get("cases").disabled = false;
   }
 }
 
 async function refreshCases() {
   const cases = await request("/workspace");
-  get("cases").innerHTML = '<option value="">Choose a case</option>' + cases.map(item =>
-    '<option value="' + escape(item.id) + '">' + escape(item.name) + '</option>').join("");
-  if (state) get("cases").value = state.id;
+  const picker = get("cases");
+  picker.replaceChildren(
+    new Option(cases.length ? "Select a borrower case" : "No saved cases yet", "", true, true),
+    ...cases.map(item => new Option(item.name, item.id)),
+  );
+  picker.options[0].disabled = true;
+  get("case-picker-help").textContent = cases.length ? "Resume a saved borrower review." :
+    (get("upload").hidden ? "Open a demo to get started." : "Open a demo or upload a PDF.");
 }
 
 function citations(ids, documentId = state.document) {
@@ -146,12 +164,15 @@ document.addEventListener("click", event => {
     render(await request("/workspace/demo/" + button.dataset.demo, {method: "POST"}));
     await refreshCases();
     get("workspace").scrollIntoView({block: "start"});
+  }, button, "Opening demo…");
+});
+get("cases").addEventListener("change", event => {
+  const caseId = event.target.value;
+  if (caseId) act(async () => {
+    render(await request("/workspace/" + encodeURIComponent(caseId)));
+    get("workspace").scrollIntoView({block: "start"});
   });
 });
-get("cases").addEventListener("change", () => act(async () => {
-  if (!get("cases").value) {get("workspace").hidden = true; state = undefined; return;}
-  render(await request("/workspace/" + get("cases").value));
-}));
 get("upload").addEventListener("submit", event => {
   event.preventDefault();
   act(async () => {
@@ -159,7 +180,7 @@ get("upload").addEventListener("submit", event => {
     render(await request("/workspace/upload?name=" + encodeURIComponent(form.elements.borrower.value), pdf(form.elements.pdf.files[0])));
     form.reset();
     await refreshCases();
-  });
+  }, event.submitter, "Uploading PDF…");
 });
 get("review").addEventListener("submit", event => {
   event.preventDefault();
@@ -168,7 +189,7 @@ get("review").addEventListener("submit", event => {
     render(await request(route("/reviews"), json({row_id: selectedRow.id, account: fields.account.value || null,
       reason: fields.reason.value, revision: state.revision})), true);
     notice("Review saved. The spread and ratios have been recalculated.");
-  });
+  }, event.submitter, "Saving review…");
 });
 get("scenario").addEventListener("submit", event => {
   event.preventDefault();
@@ -176,7 +197,7 @@ get("scenario").addEventListener("submit", event => {
     const result = await request(route("/scenario?decline=" + event.target.elements.decline.value));
     get("scenario-result").textContent = result.stressed === null ? "Cash coverage inputs are unavailable." :
       ratio("coverage", result.baseline) + " baseline → " + ratio("coverage", result.stressed) + " stressed";
-  });
+  }, event.submitter, "Calculating…");
 });
 get("replacement").addEventListener("submit", event => {
   event.preventDefault();
@@ -184,12 +205,12 @@ get("replacement").addEventListener("submit", event => {
     render(await request(route("/replacement?revision=" + state.revision), pdf(event.target.elements.pdf.files[0])));
     event.target.reset();
     notice("Replacement imported. Review the statement comparison for changes.");
-  });
+  }, event.submitter, "Uploading revision…");
 });
-get("demo-replacement").addEventListener("click", () => act(async () => {
+get("demo-replacement").addEventListener("click", event => act(async () => {
   render(await request(route("/replacement?demo=true&revision=" + state.revision), {method: "POST"}));
   notice("Replacement imported. Review the statement comparison for changes.");
-}));
+}, event.currentTarget, "Loading revision…"));
 get("memo").addEventListener("submit", event => {
   event.preventDefault();
   act(async () => {
@@ -197,7 +218,7 @@ get("memo").addEventListener("submit", event => {
       decline_percent: Number(get("scenario").elements.decline.value)}));
     render(await request(route()), true);
     notice("Memo snapshot saved. The exports preserve this evidence version.");
-  });
+  }, event.submitter, "Saving snapshot…");
 });
 
 act(refreshCases).finally(() => {

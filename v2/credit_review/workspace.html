@@ -17,9 +17,15 @@
     <div id="launchers" class="controls"><!-- demo-launchers --></div>
   </section>
   <section class="toolbar">
-    <label>Saved workspace <select id="cases" disabled><option value="">Choose a case</option></select></label>
+    <div class="case-picker">
+      <label for="cases">Open an existing case</label>
+      <select id="cases" disabled aria-describedby="case-picker-help">
+        <option value="" disabled selected>Select a borrower case</option>
+      </select>
+      <p id="case-picker-help" class="muted">Resume a saved borrower review.</p>
+    </div>
     <form id="upload" class="controls" data-upload-mode>
-      <label>Borrower <input name="borrower" required maxlength="80" placeholder="Borrower name"></label>
+      <label>Borrower for new case <input name="borrower" required maxlength="80" placeholder="Borrower name"></label>
       <label>Statement pack <input name="pdf" required type="file" accept="application/pdf"></label>
       <button id="upload-submit" disabled>Upload PDF</button>
     </form>

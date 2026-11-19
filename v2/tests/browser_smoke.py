@@ -17,13 +17,36 @@ with sync_playwright() as playwright:
     startup_requests = []
     page.on("request", lambda request: startup_requests.append(request.url))
     page.goto(url)
-    expect(page.get_by_role("button", name="Try Meridian Packaging")).to_be_enabled()
+    demo_button = page.get_by_role("button", name="Try Meridian Packaging")
+    expect(demo_button).to_be_enabled()
     assert page.locator("#upload").is_visible() == upload_visible
     assert [page.locator(selector).bounding_box() for selector in ("#intro", ".toolbar", "#cases")] == initial_layout
     assert not any(url.endswith(("/cases", "/settings")) for url in startup_requests)
-    page.get_by_role("button", name="Try Meridian Packaging").click()
+    picker = page.get_by_label("Open an existing case")
+    expect(picker).to_be_disabled()
+    expect(picker).to_contain_text("No saved cases yet")
+    resting_color = demo_button.evaluate("(button) => getComputedStyle(button).backgroundColor")
+    demo_button.hover()
+    expect(demo_button).to_have_css("cursor", "pointer")
+    hovered_color = demo_button.evaluate("(button) => getComputedStyle(button).backgroundColor")
+    assert hovered_color != resting_color
+    page.mouse.down()
+    assert demo_button.evaluate("(button) => getComputedStyle(button).backgroundColor") != hovered_color
+    page.mouse.up()
     expect(page.locator("#case-name")).to_have_text("Meridian Packaging")
+    expect(picker).to_be_enabled()
     expect(page.locator("#cases")).not_to_have_value("")
+    page.evaluate("""() => {
+      const fetchRequest = window.fetch;
+      window.fetch = (url, options) => url.includes("/scenario?")
+        ? new Promise(resolve => { window.releaseScenario = () => resolve(fetchRequest(url, options)); })
+        : fetchRequest(url, options);
+    }""")
+    page.get_by_role("button", name="Calculate").click()
+    expect(page.get_by_role("button", name="Calculating…")).to_have_attribute("aria-busy", "true")
+    page.evaluate("window.releaseScenario()")
+    expect(page.get_by_role("button", name="Calculate")).to_be_enabled()
+    expect(page.locator("#scenario-result")).to_contain_text("stressed")
     page.get_by_text("Source ledger", exact=False).click()
     row = page.locator("#financials .exception").filter(has_text="Sales revenue")
     row.get_by_role("button").click()
@@ -39,8 +62,8 @@ with sync_playwright() as playwright:
     expect(page.locator("#metrics")).to_contain_text("0.95×")
     expect(page.locator("#comparison")).to_contain_text("operating cash")
     expect(page.get_by_role("link", name="Evidence JSON")).to_be_visible()
-    case_id = page.locator("#cases").input_value()
+    case_id = picker.input_value()
     page.reload()
-    page.locator("#cases").select_option(case_id)
+    picker.select_option(case_id)
     expect(page.locator("#metrics")).to_contain_text("0.95×")
     browser.close()
