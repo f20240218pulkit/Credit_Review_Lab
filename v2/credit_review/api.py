@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, TypeAdapter, model_validator
 
 from .documents import MAX_BYTES, extract_rows, make_demo_pdf
 from .engine import Mapper, Review, SourceRow, analyse
-from .security import audit
+from .security import audit, clean_text
 from .web import public_demo, register_workspace
 
 DEMO = json.loads(Path(__file__).with_name("demo.json").read_text(encoding="utf-8"))
@@ -105,7 +105,11 @@ async def read_pdf(request):
 
 def parse_pdf(payload, *, uploaded=False):
     try:
-        return extract_rows(payload, uploaded=uploaded)
+        rows = extract_rows(payload, uploaded=uploaded)
+        if uploaded:
+            for row in rows:
+                clean_text(row.label)
+        return rows
     except (ValueError, pymupdf.FileDataError) as exc:
         if uploaded:
             audit("statement_pdf_rejected", logging.WARNING)
