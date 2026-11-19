@@ -21,6 +21,11 @@ CREATE TABLE IF NOT EXISTS documents (
     case_id TEXT NOT NULL REFERENCES cases(id), id TEXT NOT NULL, pdf BLOB NOT NULL,
     PRIMARY KEY(case_id, id)
 );
+CREATE TABLE IF NOT EXISTS account_sessions (
+    id TEXT PRIMARY KEY, owner TEXT NOT NULL, expires_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS account_sessions_owner_idx ON account_sessions(owner);
+CREATE INDEX IF NOT EXISTS account_sessions_expiry_idx ON account_sessions(expires_at);
 CREATE TABLE IF NOT EXISTS snapshots (
     case_id TEXT NOT NULL REFERENCES cases(id), id TEXT NOT NULL, data TEXT NOT NULL,
     PRIMARY KEY(case_id, id)
@@ -84,7 +89,8 @@ def init_postgres(url):
 def postgres_database(url, write):
     import psycopg
 
-    init_postgres(url)
+    if os.environ.get("CREDIT_DB_MANAGED_SCHEMA") != "1":
+        init_postgres(url)
     with psycopg.connect(url, connect_timeout=10) as db:
         if write:
             # SQLite serializes writes at the database level. Use the same

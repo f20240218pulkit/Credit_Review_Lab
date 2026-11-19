@@ -14,12 +14,20 @@ const money = value => value === null ? "—" : "₹" +
 let state;
 let selectedRow;
 let busy = false;
+let csrfToken;
 
 async function request(path, options) {
+  if (options?.method === "POST") {
+    if (!csrfToken) await request("/workspace");
+    const headers = new Headers(options.headers);
+    if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
+    options = {...options, headers};
+  }
   const response = await fetch(path, options);
   const data = await response.json();
   if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail :
     (data.detail?.map(item => item.msg).join(". ") || "Request failed"));
+  csrfToken = response.headers.get("X-CSRF-Token") ?? csrfToken;
   return data;
 }
 

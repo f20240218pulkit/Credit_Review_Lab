@@ -16,6 +16,9 @@ HEADERS = (
 ENTRY = re.compile(r"(.+?)\s*\|\s*(-?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,4})?)")
 MAX_BYTES = 2 * 1024 * 1024
 MAX_PAGES = 10
+MAX_OBJECTS = 10000
+ACTIVE_ACTIONS = {"/JavaScript", "/Launch", "/SubmitForm", "/ImportData", "/GoToR", "/GoToE", "/Rendition"}
+ACTIVE_ANNOTATIONS = {"/FileAttachment", "/RichMedia", "/Screen", "/Sound", "/Movie", "/3D", "/Widget"}
 
 
 ENTRY_TABULAR = re.compile(r"(.+?)\s{2,}(-?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,4})?)")
@@ -52,8 +55,23 @@ def make_demo_pdf(case, layout=0):
         return document.tobytes(no_new_id=True)
 
 
+def check_upload(document):
+    if document.xref_length() > MAX_OBJECTS:
+        raise ValueError("PDF exceeds the object limit")
+    if (document.is_form_pdf or document.embfile_count()
+            or document.xref_get_key(document.pdf_catalog(), "Names/JavaScript")[0] != "null"):
+        raise ValueError("Upload a static statement PDF without forms, attachments or scripts")
+    for xref in range(1, document.xref_length()):
+        action = document.xref_get_key(xref, "S")[1]
+        subtype = document.xref_get_key(xref, "Subtype")[1]
+        if (action in ACTIVE_ACTIONS or subtype in ACTIVE_ANNOTATIONS
+                or any(document.xref_get_key(xref, key)[0] != "null"
+                       for key in ("JS", "AA", "OpenAction", "RichMediaContent"))):
+            raise ValueError("Upload a static statement PDF without active content")
+
+
 @serial_pdf
-def extract_rows(payload):
+def extract_rows(payload, *, uploaded=False):
     if not payload.startswith(b"%PDF-") or len(payload) > MAX_BYTES:
         raise ValueError("Expected a PDF of at most 2 MiB")
     document_id = hashlib.sha256(payload).hexdigest()
@@ -61,6 +79,8 @@ def extract_rows(payload):
     with pymupdf.open(stream=payload, filetype="pdf") as document:
         if document.needs_pass or not 1 <= len(document) <= MAX_PAGES:
             raise ValueError("Expected an unencrypted PDF with 1 to 10 pages")
+        if uploaded:
+            check_upload(document)
         for number, page in enumerate(document, start=1):
             lines = [
                 ("".join(span["text"] for span in line["spans"]).strip(), line["bbox"])
