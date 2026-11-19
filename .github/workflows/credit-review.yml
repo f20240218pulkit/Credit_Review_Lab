@@ -38,6 +38,11 @@ jobs:
         env:
           CREDIT_DATABASE_URL: postgresql://credit_test:test_only@localhost:5432/credit_review
         run: python -m unittest discover -s tests -v
+      - name: Verify PostgreSQL row-level case isolation
+        env:
+          CREDIT_DATABASE_URL: postgresql://credit_test:test_only@localhost:5432/credit_review
+          CREDIT_PILOT_TEST_RLS: "1"
+        run: PYTHONPATH=. python tests/postgres_pilot_rls.py
       - run: python benchmark.py
       - name: Prepare Chromium
         run: |

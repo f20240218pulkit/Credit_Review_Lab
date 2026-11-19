@@ -22,7 +22,7 @@ The deployed public workspace offers synthetic demos and Help. The signed-in app
    GRANT SELECT, INSERT ON original_uploads, object_sources TO credit_review_runtime;
    ```
 
-   The pilot uses application-enforced membership plus per-case transaction locks. PostgreSQL row-level security is still a launch gap for enterprise use.
+   The pilot uses application-enforced membership plus per-case transaction locks. After deploying this release, apply [the row-level security migration](migrations/002_pilot_case_rls.sql) as the schema owner and verify it using the restricted, non-owner runtime role. It uses a transaction-local actor for cases, documents, originals and snapshots. Verify both allowed and denied access before moving real data into the environment. Older web or worker versions do not set the actor, so rollback across this migration requires coordinating a staging-tested migration rollback before switching runtime versions.
 
 ## Enable the private worker path
 

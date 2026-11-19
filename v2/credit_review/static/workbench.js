@@ -330,6 +330,8 @@ async function watchIntake(id) {
 }
 
 async function privateUpload(file, params, replacement = {}) {
+  const limit = statementType(file) === "text/csv" ? 128 * 1024 : 2 * 1024 * 1024;
+  if (!file.size || file.size > limit) throw new Error("Select a nonempty statement within the upload limit.");
   const bytes = await file.arrayBuffer();
   const hash = await crypto.subtle.digest("SHA-256", bytes);
   const checksum = Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, "0")).join("");

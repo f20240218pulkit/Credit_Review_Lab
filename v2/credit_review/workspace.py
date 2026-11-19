@@ -30,14 +30,6 @@ CREATE TABLE IF NOT EXISTS object_sources (
     object_version TEXT NOT NULL, media_type TEXT NOT NULL,
     PRIMARY KEY(case_id, document_id), FOREIGN KEY(case_id, document_id) REFERENCES documents(case_id, id)
 );
-CREATE TABLE IF NOT EXISTS intake_jobs (
-    id TEXT PRIMARY KEY, account TEXT NOT NULL, org_id TEXT NOT NULL REFERENCES organizations(id),
-    borrower TEXT NOT NULL, media_type TEXT NOT NULL, checksum TEXT NOT NULL, byte_count INTEGER NOT NULL,
-    object_key TEXT NOT NULL UNIQUE, object_version TEXT, status TEXT NOT NULL, available_at BIGINT NOT NULL,
-    deadline BIGINT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, error TEXT,
-    target_case_id TEXT REFERENCES cases(id), target_revision INTEGER
-);
-CREATE INDEX IF NOT EXISTS intake_jobs_ready_idx ON intake_jobs(status, available_at);
 CREATE TABLE IF NOT EXISTS account_sessions (
     id TEXT PRIMARY KEY, owner TEXT NOT NULL, expires_at BIGINT NOT NULL
 );
@@ -66,6 +58,14 @@ CREATE TABLE IF NOT EXISTS usage_windows (
     PRIMARY KEY(bucket, window_start)
 );
 CREATE INDEX IF NOT EXISTS usage_windows_expiry_idx ON usage_windows(window_start);
+CREATE TABLE IF NOT EXISTS intake_jobs (
+    id TEXT PRIMARY KEY, account TEXT NOT NULL, org_id TEXT NOT NULL REFERENCES organizations(id),
+    borrower TEXT NOT NULL, media_type TEXT NOT NULL, checksum TEXT NOT NULL, byte_count INTEGER NOT NULL,
+    object_key TEXT NOT NULL UNIQUE, object_version TEXT, status TEXT NOT NULL, available_at BIGINT NOT NULL,
+    deadline BIGINT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, error TEXT,
+    target_case_id TEXT REFERENCES cases(id), target_revision INTEGER
+);
+CREATE INDEX IF NOT EXISTS intake_jobs_ready_idx ON intake_jobs(status, available_at);
 CREATE TABLE IF NOT EXISTS snapshots (
     case_id TEXT NOT NULL REFERENCES cases(id), id TEXT NOT NULL, data TEXT NOT NULL,
     PRIMARY KEY(case_id, id)
@@ -142,7 +142,13 @@ WHERE ((tc.case_id IS NULL AND c.owner=?) OR m.role IS NOT NULL)
 """
 
 
+def set_case_actor(db, owner):
+    if isinstance(db, PostgresConnection):
+        db.execute("SELECT set_config('credit.case_actor', ?, true)", (owner,))
+
+
 def load_case(db, owner, case_id, *, lock=False):
+    set_case_actor(db, owner)
     record = db.execute(
         "SELECT c.state, m.role, tc.org_id " + CASE_ACCESS + " AND c.id=?" +
         (" FOR UPDATE OF c" if lock and isinstance(db, PostgresConnection) else ""),
@@ -159,6 +165,7 @@ def load_case(db, owner, case_id, *, lock=False):
 
 
 def list_cases(db, owner):
+    set_case_actor(db, owner)
     return db.execute("SELECT c.state, tc.org_id " + CASE_ACCESS + " ORDER BY c.rowid DESC", (owner, owner))
 
 
@@ -202,6 +209,7 @@ def create_case(db, owner, name, pdf, rows, demo=None, organization=None, case_i
     years = sorted({row.year for row in rows})
     if len(years) != 2:
         raise HTTPException(422, "A workspace needs a statement pack with two reporting years")
+    set_case_actor(db, owner)
     case_id = case_id or uuid4().hex
     db.execute("INSERT INTO cases (id, owner, state) VALUES (?, ?, ?)", (case_id, owner, "{}"))
     if organization:
