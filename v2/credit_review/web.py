@@ -113,8 +113,7 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
         page = page.replace("<!-- upload-access -->", upload_access)
         if object_storage.enabled() and account_owner(request):
             page = page.replace("<body>", '<body data-private-intake>')
-        if account_owner(request):
-            page = page.replace('id="team-tools" hidden', 'id="team-tools"')
+        page = page.replace(" data-team-guard", "" if account_owner(request) else " hidden")
         return HTMLResponse(page.replace("<!-- account-action -->", account_action), headers=NO_STORE)
 
     @app.get("/help", response_class=HTMLResponse, include_in_schema=False)

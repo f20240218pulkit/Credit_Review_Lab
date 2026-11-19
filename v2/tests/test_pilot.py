@@ -36,6 +36,8 @@ class PilotTests(unittest.TestCase):
         self.analyst = self.client("analyst@example.test")
         self.reviewer = self.client("reviewer@example.test")
         self.outsider = self.client("outsider@example.test")
+        self.assertNotIn('id="team-tools" class="panel pilot-panel" hidden', self.admin.get("/").text)
+        self.assertIn('id="team-tools" class="panel pilot-panel" hidden', TestClient(self.app).get("/").text)
         self.assertEqual(self.outsider.post("/workspace/organizations", json={"name": "No"}).status_code, 403)
         result = self.admin.post("/workspace/organizations", json={"name": "Pilot team"})
         self.assertEqual(result.status_code, 201, result.text)

@@ -22,6 +22,7 @@ with sync_playwright() as playwright:
     owner.get_by_text("Team settings").click()
     owner.get_by_label("New team name").fill("Pilot Browser Team")
     owner.get_by_role("button", name="Create team").click()
+    expect(owner.locator("#notice")).to_have_text("Team created.")
     expect(owner.get_by_role("button", name="Generate invitation")).to_be_enabled()
     for page, role in [(analyst, "analyst"), (reviewer, "reviewer")]:
         owner.get_by_label("Invitee name").fill(role.title())
