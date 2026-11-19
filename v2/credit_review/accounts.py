@@ -111,16 +111,21 @@ def register_accounts(app):
             controls = "<p>Account sign-in has not been configured on this deployment.</p>"
         else:
             controls = (
-                '<div class="controls"><a class="signin-option" href="/auth/login/email">Continue with email</a>'
-                '<a class="signin-option" href="/auth/login/google">Continue with Google</a></div>'
+                '<div class="controls"><a class="button-link" href="/auth/login/email">Continue with email</a>'
+                '<a class="button-link button-secondary" href="/auth/login/google">Continue with Google</a></div>'
             )
         feedback = '<p role="alert">Sign-in could not be completed. Please try again.</p>' if error else ""
         return HTMLResponse(
             '<!doctype html><html lang="en"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
-            '<title>Sign in | Credit Review Lab</title><link rel="stylesheet" href="/assets/style.css"></head>'
-            '<body><header><div class="brand">Credit Review Lab</div><a href="/">Back to workspace</a></header>'
-            '<main><section class="intro"><h1>Sign in</h1>'
+            '<meta name="theme-color" content="#080909">'
+            '<title>Sign in | Credit Review Lab</title><link rel="stylesheet" href="/assets/style.css?v=3"></head>'
+            '<body><header class="site-header"><div class="header-inner">'
+            '<a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>'
+            '<span>Credit Review<span class="brand-accent"> Lab</span></span></a>'
+            '<a class="button-link button-secondary" href="/">Back to workspace</a></div></header>'
+            '<main class="auth-main"><section class="auth-card" aria-labelledby="sign-in-title">'
+            '<h1 id="sign-in-title">Sign in</h1>'
             '<p>Sign in to upload statement packs and return to your saved reviews.</p>'
             f'{feedback}{controls}<p><a href="/">Explore public demos</a></p></section></main></body></html>',
             headers=NO_STORE,
