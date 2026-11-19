@@ -15,6 +15,7 @@ class WorkspaceTests(unittest.TestCase):
         tmp = self.enterContext(TemporaryDirectory())
         self.enterContext(patch.dict("os.environ", {"CREDIT_DB": tmp + "/test.sqlite3"}))
         self.client = TestClient(app)
+        self.client.headers["X-CSRF-Token"] = self.client.get("/workspace").headers["X-CSRF-Token"]
 
     def create(self, fixture="CR-102"):
         response = self.client.post("/workspace/demo/" + fixture)

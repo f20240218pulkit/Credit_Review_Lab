@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import logging
 
 import pymupdf
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -9,6 +10,7 @@ from pydantic import BaseModel, Field, TypeAdapter, model_validator
 
 from .documents import MAX_BYTES, extract_rows, make_demo_pdf
 from .engine import Mapper, Review, SourceRow, analyse
+from .security import audit, clean_text
 from .web import public_demo, register_workspace
 
 DEMO = json.loads(Path(__file__).with_name("demo.json").read_text(encoding="utf-8"))
@@ -86,11 +88,12 @@ def demo_statement(case_id: str):
 async def extract_statement(request: Request):
     if public_demo():
         raise HTTPException(403, "Uploads are available in the local workspace")
-    return await run_in_threadpool(parse_pdf, await read_pdf(request))
+    return await run_in_threadpool(parse_pdf, await read_pdf(request), uploaded=True)
 
 
 async def read_pdf(request):
-    if request.headers.get("content-type", "").split(";")[0] != "application/pdf":
+    if request.headers.get("content-type", "").partition(";")[0].strip().lower() != "application/pdf":
+        audit("statement_media_type_rejected", logging.WARNING)
         raise HTTPException(415, "Send PDF bytes with Content-Type application/pdf")
     payload = bytearray()
     async for chunk in request.stream():
@@ -100,10 +103,16 @@ async def read_pdf(request):
     return bytes(payload)
 
 
-def parse_pdf(payload):
+def parse_pdf(payload, *, uploaded=False):
     try:
-        return extract_rows(payload)
+        rows = extract_rows(payload, uploaded=uploaded)
+        if uploaded:
+            for row in rows:
+                clean_text(row.label)
+        return rows
     except (ValueError, pymupdf.FileDataError) as exc:
+        if uploaded:
+            audit("statement_pdf_rejected", logging.WARNING)
         raise HTTPException(422, "The PDF could not be opened" if isinstance(exc, pymupdf.FileDataError)
                             else str(exc)) from exc
 

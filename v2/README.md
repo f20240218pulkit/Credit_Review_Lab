@@ -90,3 +90,7 @@ The public demo can run without account configuration. Once Auth0 is configured,
 4. Redeploy, open `/signin` on the production domain, and test both methods with test accounts. A successful sign-in shows **Sign out** and **Upload PDF**. The public demo remains available without an account.
 
 The local workspace still supports uploads without Auth0. The unauthenticated extraction API remains disabled on Vercel. Use synthetic statement packs for portfolio demonstrations.
+
+## Security configuration
+
+See [Security controls and deployment checks](SECURITY.md) for request protections, Auth0 password-change session revocation and the DDL-free PostgreSQL runtime role.

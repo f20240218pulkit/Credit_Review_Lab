@@ -1,16 +1,17 @@
 from copy import deepcopy
 from html import escape
 import json
+import logging
 import os
 import re
 from pathlib import Path
 from secrets import token_urlsafe
 from uuid import uuid4
 
-from fastapi import HTTPException, Query, Request, Response
+from fastapi import Depends, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 import pymupdf
 from starlette.concurrency import run_in_threadpool
 
@@ -18,6 +19,7 @@ from .accounts import NO_STORE, account_owner, register_accounts
 from .documents import make_demo_pdf, serial_pdf
 from .engine import Review
 from .memos import cash_scenario, memo_pdf
+from .security import CSRF_HEADER, RequestSecurity, audit, clean_text, csrf_token, valid_csrf
 from . import workspace as work
 
 COOKIE = "credit_workspace"
@@ -33,16 +35,30 @@ LAYOUTS = {"CR-101": 0, "CR-102": 1, "CR-103": 2}
 class ReviewRequest(Review):
     revision: int = Field(ge=1)
 
+    _safe_reason = field_validator("reason")(clean_text)
+
 
 class MemoRequest(BaseModel):
     revision: int = Field(ge=1)
     decline_percent: int = Field(default=15, ge=0, le=100)
     notes: str = Field(default="", max_length=1800)
 
+    _safe_notes = field_validator("notes")(clean_text)
+
 
 def owner(request):
     token = request.cookies.get(COOKIE, "")
     return account_owner(request) or (token if re.fullmatch(r"[A-Za-z0-9_-]{43}", token) else "")
+
+
+def csrf_key(request):
+    return request.scope.get("session", {}).get("session_id") if account_owner(request) else owner(request)
+
+
+def require_workspace_csrf(request: Request):
+    if not valid_csrf(request, csrf_key(request), request.headers.get(CSRF_HEADER)):
+        audit("workspace_csrf_rejected", logging.WARNING)
+        raise HTTPException(403, "Request verification failed. Reload the workspace and try again.")
 
 
 def can_upload(request):
@@ -59,6 +75,7 @@ def session(request, response):
 
 def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
     register_accounts(app)
+    app.add_middleware(RequestSecurity)
     app.mount("/assets", StaticFiles(directory=STATIC), name="assets")
 
     launchers = "".join(
@@ -70,7 +87,8 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     def home(request: Request):
         account_action = (
-            '<form action="/auth/logout" method="post"><button type="submit">Sign out</button></form>'
+            '<form action="/auth/logout" method="post"><input type="hidden" name="csrf" value="'
+            + csrf_token(csrf_key(request)) + '"><button type="submit">Sign out</button></form>'
             if account_owner(request) else '<a href="/signin">Sign in</a>'
         )
         page = homepage.replace(" data-upload-mode", "" if can_upload(request) else " hidden")
@@ -87,12 +105,13 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
     @app.get("/workspace")
     def list_workspace(request: Request, response: Response):
         token = session(request, response)
+        response.headers[CSRF_HEADER] = csrf_token(csrf_key(request) or token)
         with work.database() as db:
             states = [json.loads(item[0]) for item in db.execute(
                 "SELECT state FROM cases WHERE owner=? ORDER BY rowid DESC", (token,))]
         return [{key: state[key] for key in ("id", "name", "demo")} for state in states]
 
-    @app.post("/workspace/demo/{demo_id}", status_code=201)
+    @app.post("/workspace/demo/{demo_id}", status_code=201, dependencies=[Depends(require_workspace_csrf)])
     def create_demo(demo_id: str, request: Request, response: Response):
         case = cases.get(demo_id)
         if case is None:
@@ -104,15 +123,21 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
             state = work.create_case(db, token, case["name"], pdf, rows, demo_id)
         return work.view(state, mapper)
 
-    @app.post("/workspace/upload", status_code=201)
+    @app.post("/workspace/upload", status_code=201, dependencies=[Depends(require_workspace_csrf)])
     async def upload(request: Request, response: Response, name: str = Query(min_length=1, max_length=80)):
         if not can_upload(request):
             raise HTTPException(403, "Sign in to upload statement packs")
         token = session(request, response)
+        try:
+            name = clean_text(name).strip()
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        if not name:
+            raise HTTPException(422, "Borrower name is required")
         pdf = await read_pdf(request)
 
         def create():
-            rows = parse_pdf(pdf)
+            rows = parse_pdf(pdf, uploaded=True)
             with work.database(write=True) as db:
                 state = work.create_case(db, token, name, pdf, rows)
             return work.view(state, mapper)
@@ -124,7 +149,7 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
         with work.database() as db:
             return work.view(work.load_case(db, owner(request), case_id), mapper)
 
-    @app.post("/workspace/{case_id}/reviews")
+    @app.post("/workspace/{case_id}/reviews", dependencies=[Depends(require_workspace_csrf)])
     def add_review(case_id: str, body: ReviewRequest, request: Request):
         with work.database(write=True) as db:
             state = work.load_case(db, owner(request), case_id)
@@ -133,7 +158,7 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
             work.store_case(db, case_id, state)
             return work.view(state, mapper)
 
-    @app.post("/workspace/{case_id}/replacement")
+    @app.post("/workspace/{case_id}/replacement", dependencies=[Depends(require_workspace_csrf)])
     async def replace(case_id: str, request: Request, revision: int, demo: bool = False):
         token = owner(request)
         if not demo and not can_upload(request):
@@ -155,12 +180,14 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
             pdf = await read_pdf(request)
 
         def commit():
-            rows = parse_pdf(pdf)
+            rows = parse_pdf(pdf, uploaded=not demo)
             with work.database(write=True) as db:
                 current = work.load_case(db, token, case_id)
                 work.check_revision(current, revision)
                 updated = work.replace_document(db, current, pdf, rows, mapper)
-                return work.view(updated, mapper)
+                result = work.view(updated, mapper)
+            audit("statement_replaced")
+            return result
 
         return await run_in_threadpool(commit)
 
@@ -203,7 +230,7 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
             state = work.load_case(db, owner(request), case_id)
             return cash_scenario(work.result(state, mapper), decline)
 
-    @app.post("/workspace/{case_id}/snapshots", status_code=201)
+    @app.post("/workspace/{case_id}/snapshots", status_code=201, dependencies=[Depends(require_workspace_csrf)])
     def snapshot(case_id: str, body: MemoRequest, request: Request):
         with work.database(write=True) as db:
             state = work.load_case(db, owner(request), case_id)
@@ -233,9 +260,3 @@ def register_workspace(app, cases, mapper, read_pdf, parse_pdf):
             return Response(memo_pdf(data), media_type="application/pdf", headers=headers)
         return JSONResponse(data, headers=headers)
 
-    @app.middleware("http")
-    async def workspace_cache(request, call_next):
-        response = await call_next(request)
-        if request.url.path.startswith("/workspace"):
-            response.headers["Cache-Control"] = "private, no-store"
-        return response
