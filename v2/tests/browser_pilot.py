@@ -17,6 +17,8 @@ with sync_playwright() as playwright:
     analyst = browser.new_page(extra_http_headers={"x-pilot-test-user": "analyst"})
     reviewer = browser.new_page(extra_http_headers={"x-pilot-test-user": "reviewer"})
     outsider = browser.new_page(extra_http_headers={"x-pilot-test-user": "outsider"})
+    for page in (owner, analyst, reviewer, outsider):
+        page.set_default_timeout(10000)
 
     owner.goto(url)
     owner.get_by_text("Team settings").click()
@@ -27,7 +29,7 @@ with sync_playwright() as playwright:
     for page, role in [(analyst, "analyst"), (reviewer, "reviewer")]:
         owner.get_by_label("Invitee name").fill(role.title())
         owner.get_by_label("Verified email").fill(role + "@example.test")
-        owner.get_by_label("Role", exact=True).select_option(role)
+        owner.locator("#invite-role").select_option(role)
         previous = owner.locator("#invite-link").input_value()
         with owner.expect_response(lambda response: response.url.endswith("/invitations") and response.ok):
             owner.get_by_role("button", name="Generate invitation").click()
@@ -46,7 +48,7 @@ with sync_playwright() as playwright:
     for row in fixture:
         writer.writerow([row[key] for key in ("year", "label", "value", "unit", "currency")])
     analyst.get_by_label("Borrower for new case").fill("Pilot borrower")
-    analyst.get_by_label("Save to").select_option(label="Pilot Browser Team")
+    analyst.locator("#upload-organization").select_option(label="Pilot Browser Team")
     analyst.locator("#upload input[type=file]").set_input_files({
         "name": "statement.csv", "mimeType": "text/csv", "buffer": stream.getvalue().encode(),
     })
@@ -65,7 +67,7 @@ with sync_playwright() as playwright:
         state = response.json()
     analyst.reload()
     expect(analyst.get_by_role("link", name="Download uploaded CSV")).to_be_visible()
-    analyst.get_by_label("Assign reviewer").select_option(label="Reviewer")
+    analyst.locator("#assigned-reviewer").select_option(label="Reviewer")
     analyst.get_by_role("button", name="Send for review").click()
     expect(analyst.locator("#workflow-status")).to_contain_text("in review")
     reviewer.goto(case_url)
