@@ -36,17 +36,6 @@ with sync_playwright() as playwright:
     expect(page.locator("#case-name")).to_have_text("Meridian Packaging")
     expect(picker).to_be_enabled()
     expect(page.locator("#cases")).not_to_have_value("")
-    page.evaluate("""() => {
-      const fetchRequest = window.fetch;
-      window.fetch = (url, options) => url.includes("/scenario?")
-        ? new Promise(resolve => { window.releaseScenario = () => resolve(fetchRequest(url, options)); })
-        : fetchRequest(url, options);
-    }""")
-    page.get_by_role("button", name="Calculate").click()
-    expect(page.get_by_role("button", name="Calculating…")).to_have_attribute("aria-busy", "true")
-    page.evaluate("window.releaseScenario()")
-    expect(page.get_by_role("button", name="Calculate")).to_be_enabled()
-    expect(page.locator("#scenario-result")).to_contain_text("stressed")
     page.get_by_text("Source ledger", exact=False).click()
     row = page.locator("#financials .exception").filter(has_text="Sales revenue")
     row.get_by_role("button").click()
@@ -62,6 +51,17 @@ with sync_playwright() as playwright:
     expect(page.locator("#metrics")).to_contain_text("0.95×")
     expect(page.locator("#comparison")).to_contain_text("operating cash")
     expect(page.get_by_role("link", name="Evidence JSON")).to_be_visible()
+    page.evaluate("""() => {
+      const fetchRequest = window.fetch;
+      window.fetch = (url, options) => url.includes("/scenario?")
+        ? new Promise(resolve => { window.releaseScenario = () => resolve(fetchRequest(url, options)); })
+        : fetchRequest(url, options);
+    }""")
+    page.get_by_role("button", name="Calculate").click()
+    expect(page.get_by_role("button", name="Calculating…")).to_have_attribute("aria-busy", "true")
+    page.evaluate("window.releaseScenario()")
+    expect(page.get_by_role("button", name="Calculate")).to_be_enabled()
+    expect(page.locator("#scenario-result")).to_have_text("0.95× baseline → 0.81× stressed")
     case_id = picker.input_value()
     page.reload()
     picker.select_option(case_id)
