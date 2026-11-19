@@ -21,11 +21,51 @@ CREATE TABLE IF NOT EXISTS documents (
     case_id TEXT NOT NULL REFERENCES cases(id), id TEXT NOT NULL, pdf BLOB NOT NULL,
     PRIMARY KEY(case_id, id)
 );
+CREATE TABLE IF NOT EXISTS original_uploads (
+    case_id TEXT NOT NULL, document_id TEXT NOT NULL, media_type TEXT NOT NULL, payload BLOB NOT NULL,
+    PRIMARY KEY(case_id, document_id), FOREIGN KEY(case_id, document_id) REFERENCES documents(case_id, id)
+);
+CREATE TABLE IF NOT EXISTS object_sources (
+    case_id TEXT NOT NULL, document_id TEXT NOT NULL, object_key TEXT NOT NULL,
+    object_version TEXT NOT NULL, media_type TEXT NOT NULL,
+    PRIMARY KEY(case_id, document_id), FOREIGN KEY(case_id, document_id) REFERENCES documents(case_id, id)
+);
 CREATE TABLE IF NOT EXISTS account_sessions (
     id TEXT PRIMARY KEY, owner TEXT NOT NULL, expires_at BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS account_sessions_owner_idx ON account_sessions(owner);
 CREATE INDEX IF NOT EXISTS account_sessions_expiry_idx ON account_sessions(expires_at);
+CREATE TABLE IF NOT EXISTS organizations (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memberships (
+    org_id TEXT NOT NULL REFERENCES organizations(id), account TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('admin', 'analyst', 'reviewer')), display_name TEXT NOT NULL,
+    PRIMARY KEY(org_id, account)
+);
+CREATE INDEX IF NOT EXISTS memberships_account_idx ON memberships(account);
+CREATE TABLE IF NOT EXISTS invitations (
+    digest TEXT PRIMARY KEY, org_id TEXT NOT NULL REFERENCES organizations(id),
+    email_digest TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('analyst', 'reviewer')),
+    display_name TEXT NOT NULL, expires_at BIGINT NOT NULL, used_at TEXT
+);
+CREATE TABLE IF NOT EXISTS team_cases (
+    case_id TEXT PRIMARY KEY REFERENCES cases(id), org_id TEXT NOT NULL REFERENCES organizations(id)
+);
+CREATE INDEX IF NOT EXISTS team_cases_org_idx ON team_cases(org_id);
+CREATE TABLE IF NOT EXISTS usage_windows (
+    bucket TEXT NOT NULL, window_start BIGINT NOT NULL, hits INTEGER NOT NULL,
+    PRIMARY KEY(bucket, window_start)
+);
+CREATE INDEX IF NOT EXISTS usage_windows_expiry_idx ON usage_windows(window_start);
+CREATE TABLE IF NOT EXISTS intake_jobs (
+    id TEXT PRIMARY KEY, account TEXT NOT NULL, org_id TEXT NOT NULL REFERENCES organizations(id),
+    borrower TEXT NOT NULL, media_type TEXT NOT NULL, checksum TEXT NOT NULL, byte_count INTEGER NOT NULL,
+    object_key TEXT NOT NULL UNIQUE, object_version TEXT, status TEXT NOT NULL, available_at BIGINT NOT NULL,
+    deadline BIGINT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, error TEXT,
+    target_case_id TEXT REFERENCES cases(id), target_revision INTEGER
+);
+CREATE INDEX IF NOT EXISTS intake_jobs_ready_idx ON intake_jobs(status, available_at);
 CREATE TABLE IF NOT EXISTS snapshots (
     case_id TEXT NOT NULL REFERENCES cases(id), id TEXT NOT NULL, data TEXT NOT NULL,
     PRIMARY KEY(case_id, id)
@@ -92,22 +132,55 @@ def postgres_database(url, write):
     if os.environ.get("CREDIT_DB_MANAGED_SCHEMA") != "1":
         init_postgres(url)
     with psycopg.connect(url, connect_timeout=10) as db:
-        if write:
-            # SQLite serializes writes at the database level. Use the same
-            # contract here so revision checks and writes are atomic.
-            db.execute("SELECT pg_advisory_xact_lock(62479302)")
         yield PostgresConnection(db)
 
 
-def load_case(db, owner, case_id):
-    record = db.execute("SELECT state FROM cases WHERE id=? AND owner=?", (case_id, owner)).fetchone()
+CASE_ACCESS = """FROM cases c
+LEFT JOIN team_cases tc ON c.id=tc.case_id
+LEFT JOIN memberships m ON m.org_id=tc.org_id AND m.account=?
+WHERE ((tc.case_id IS NULL AND c.owner=?) OR m.role IS NOT NULL)
+"""
+
+
+def set_case_actor(db, owner):
+    if isinstance(db, PostgresConnection):
+        db.execute("SELECT set_config('credit.case_actor', ?, true)", (owner,))
+
+
+def load_case(db, owner, case_id, *, lock=False):
+    set_case_actor(db, owner)
+    record = db.execute(
+        "SELECT c.state, m.role, tc.org_id " + CASE_ACCESS + " AND c.id=?" +
+        (" FOR UPDATE OF c" if lock and isinstance(db, PostgresConnection) else ""),
+        (owner, owner, case_id),
+    ).fetchone()
     if record is None:
         raise HTTPException(404, "Workspace case unavailable")
-    return json.loads(record[0])
+    state = json.loads(record[0])
+    if record[2]:
+        state["access"] = {"role": record[1], "organization": record[2],
+                           "assigned_to_me": state.get("workflow", {}).get("reviewer") == owner,
+                           "submitted_by_me": state.get("workflow", {}).get("submitted_by") == owner}
+    return state
+
+
+def list_cases(db, owner):
+    set_case_actor(db, owner)
+    return db.execute("SELECT c.state, tc.org_id " + CASE_ACCESS + " ORDER BY c.rowid DESC", (owner, owner))
+
+
+def require_edit(state, *, replacement=False):
+    if state.get("access", {}).get("role") not in {None, "admin", "analyst"}:
+        raise HTTPException(403, "An analyst or administrator must edit this case")
+    if state.get("archived"):
+        raise HTTPException(409, "Restore this archived case before editing")
+    status = state.get("workflow", {}).get("status")
+    if status in {"in_review", "signed_off"} and not (replacement and status == "signed_off"):
+        raise HTTPException(409, "This revision is locked for review")
 
 
 def store_case(db, case_id, state):
-    db.execute("UPDATE cases SET state=? WHERE id=?", (json.dumps(state), case_id))
+    db.execute("UPDATE cases SET state=? WHERE id=?", (json.dumps({key: value for key, value in state.items() if key != "access"}), case_id))
 
 
 def check_revision(state, revision):
@@ -132,12 +205,15 @@ def save_document(db, case_id, rows, pdf):
     return doc_id
 
 
-def create_case(db, owner, name, pdf, rows, demo=None):
+def create_case(db, owner, name, pdf, rows, demo=None, organization=None, case_id=None):
     years = sorted({row.year for row in rows})
     if len(years) != 2:
         raise HTTPException(422, "A workspace needs a statement pack with two reporting years")
-    case_id = uuid4().hex
+    set_case_actor(db, owner)
+    case_id = case_id or uuid4().hex
     db.execute("INSERT INTO cases (id, owner, state) VALUES (?, ?, ?)", (case_id, owner, "{}"))
+    if organization:
+        db.execute("INSERT INTO team_cases (case_id, org_id) VALUES (?, ?)", (case_id, organization))
     doc_id = save_document(db, case_id, rows, pdf)
     state = {"id": case_id, "name": name, "demo": demo, "years": years, "revision": 1,
              "document": doc_id, "versions": [{"document": doc_id, "at": now()}],
@@ -147,7 +223,7 @@ def create_case(db, owner, name, pdf, rows, demo=None):
     return state
 
 
-def review_row(state, decision, mapper):
+def review_row(state, decision, mapper, actor=None):
     row = next((row for row in state["rows"] if row["id"] == decision.row_id), None)
     if row is None:
         raise HTTPException(422, "Review must reference an active source row")
@@ -155,6 +231,8 @@ def review_row(state, decision, mapper):
     before = previous["decision"]["account"] if previous else mapper.suggest(row["label"])["account"]
     event = {"action": "review", "document": state["document"], "at": now(), "before": before,
              "decision": decision.model_dump(mode="json")}
+    if actor:
+        event["actor"] = actor
     state["reviews"][decision.row_id] = event
     state["history"].append(event)
     state["revision"] += 1
@@ -194,6 +272,8 @@ def replace_document(db, state, pdf, rows, mapper):
     save_document(db, state["id"], rows, pdf)
     reopened = len(state["reviews"]) - len(carried)
     state.update(document=new_id, rows=new_rows, reviews=carried, revision=state["revision"] + 1)
+    if state.get("workflow", {}).get("status") == "signed_off":
+        state["workflow"] = {"status": "draft"}
     state["versions"].append({"document": new_id, "at": now()})
     state["history"].append({"action": "replacement", "at": now(), "from_document": old_id,
                              "document": new_id, "reopened_reviews": reopened})

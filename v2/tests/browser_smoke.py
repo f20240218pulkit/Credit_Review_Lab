@@ -10,6 +10,13 @@ with sync_playwright() as playwright:
     expect(initial.get_by_role("button", name="Try Meridian Packaging")).to_be_visible()
     upload_visible = os.environ.get("CREDIT_PUBLIC_DEMO") != "1"
     assert initial.locator("#upload").is_visible() == upload_visible
+    expect(initial.get_by_role("link", name="Help")).to_be_visible()
+    assert initial.request.get(url + "/help").ok
+    if not upload_visible:
+        for path in ("/docs", "/redoc", "/openapi.json"):
+            assert initial.request.get(url + path).status == 404
+        for path in ("/analyse", "/extract"):
+            assert initial.request.post(url + path).status == 404
     initial_layout = [initial.locator(selector).bounding_box() for selector in ("#intro", ".toolbar", "#cases")]
     initial.close()
 

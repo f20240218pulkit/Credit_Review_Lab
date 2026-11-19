@@ -8,15 +8,17 @@ from starlette.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, TypeAdapter, model_validator
 
+from .config import developer_api
 from .documents import MAX_BYTES, extract_rows, make_demo_pdf
 from .engine import Mapper, Review, SourceRow, analyse
 from .security import audit, clean_text
-from .web import public_demo, register_workspace
+from .web import register_workspace
 
 DEMO = json.loads(Path(__file__).with_name("demo.json").read_text(encoding="utf-8"))
 CASES = {case["id"]: case for case in DEMO["cases"]}
 MAPPER = Mapper(DEMO["labels"])
-app = FastAPI(title="Credit Review Lab", version="0.3.0")
+app = FastAPI(title="Credit Review Lab", version="0.4.0",
+              openapi_url="/openapi.json" if developer_api() else None)
 
 
 class DemoReview(BaseModel):
@@ -71,7 +73,6 @@ def review_demo(case_id: str, body: DemoReview):
     return run_analysis(get_demo_request(case_id, body.reviews))
 
 
-@app.post("/analyse")
 def analyse_rows(body: AnalysisRequest):
     return run_analysis(body)
 
@@ -84,10 +85,7 @@ def demo_statement(case_id: str):
     return Response(make_demo_pdf(case), media_type="application/pdf")
 
 
-@app.post("/extract")
 async def extract_statement(request: Request):
-    if public_demo():
-        raise HTTPException(403, "Uploads are available in the local workspace")
     return await run_in_threadpool(parse_pdf, await read_pdf(request), uploaded=True)
 
 
@@ -116,5 +114,9 @@ def parse_pdf(payload, *, uploaded=False):
         raise HTTPException(422, "The PDF could not be opened" if isinstance(exc, pymupdf.FileDataError)
                             else str(exc)) from exc
 
+
+if developer_api():
+    app.add_api_route("/analyse", analyse_rows, methods=["POST"])
+    app.add_api_route("/extract", extract_statement, methods=["POST"])
 
 register_workspace(app, CASES, MAPPER, read_pdf, parse_pdf)

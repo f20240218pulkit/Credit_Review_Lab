@@ -68,9 +68,13 @@ class RequestSecurity:
                 headers["X-Frame-Options"] = "DENY"
                 headers["Referrer-Policy"] = "no-referrer"
                 policy = "frame-ancestors 'none'; base-uri 'none'; object-src 'none'"
+                storage_origin = os.getenv("CREDIT_UPLOAD_ORIGIN", "").rstrip("/")
+                connect = "'self'"
+                if re.fullmatch(r"https://[a-zA-Z0-9.-]+", storage_origin):
+                    connect += " " + storage_origin
                 if path not in {"/docs", "/redoc", "/docs/oauth2-redirect"}:
                     policy += ("; default-src 'none'; script-src 'self'; style-src 'self';"
-                               f" img-src 'self'; connect-src 'self'; form-action {self.form_targets}")
+                               f" img-src 'self'; connect-src {connect}; form-action {self.form_targets}")
                 headers["Content-Security-Policy"] = policy
                 if scope["scheme"] == "https" or os.environ.get("VERCEL") == "1":
                     headers["Strict-Transport-Security"] = "max-age=63072000"

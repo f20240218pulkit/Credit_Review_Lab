@@ -33,6 +33,10 @@ def account_key(domain, subject):
     return "account:" + sha256(f"{domain}\0{subject}".encode()).hexdigest()
 
 
+def email_digest(value):
+    return sha256(value.strip().casefold().encode()).hexdigest()
+
+
 def session_digest(session_id):
     return sha256(session_id.encode()).hexdigest()
 
@@ -162,12 +166,16 @@ def register_accounts(app):
         except (OAuthError, HTTPError, JoseError, RFCJoseError):
             audit("auth_callback_rejected", logging.WARNING)
             return RedirectResponse("/signin?error=true", status_code=303, headers=NO_STORE)
-        subject = (token.get("userinfo") or {}).get("sub")
+        claims = token.get("userinfo") or {}
+        subject = claims.get("sub")
         if not token.get("id_token") or not isinstance(subject, str) or not subject:
             audit("auth_identity_rejected", logging.WARNING)
             return RedirectResponse("/signin?error=true", status_code=303, headers=NO_STORE)
         request.session.clear()
         request.session["session_id"] = await run_in_threadpool(start_session, account_key(domain, subject))
+        email = claims.get("email")
+        if claims.get("email_verified") is True and isinstance(email, str) and email:
+            request.session["verified_email"] = email_digest(email)
         audit("auth_login_succeeded")
         return RedirectResponse("/", status_code=303, headers=NO_STORE)
 

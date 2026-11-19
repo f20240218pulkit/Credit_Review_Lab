@@ -94,3 +94,7 @@ The local workspace still supports uploads without Auth0. The unauthenticated ex
 ## Security configuration
 
 See [Security controls and deployment checks](SECURITY.md) for request protections, Auth0 password-change session revocation and the DDL-free PostgreSQL runtime role.
+
+## Team pilot
+
+See [PILOT.md](PILOT.md) for team setup, the private upload worker, database grants, and the checks required before running a real-data pilot. Developer API docs and raw analysis and extraction tools are disabled by default in public deployments. Set `CREDIT_DEVELOPER_API=1` only in controlled development environments.

@@ -335,3 +335,14 @@ li + li { margin-top: .5rem; }
 @media (pointer: coarse) {
   .source, .case-nav a { min-height: 2.75rem; }
 }
+
+.pilot-panel { margin-top: 1rem; }
+.pilot-panel form + form, #invite-result, #inbox-results { margin-top: .75rem; }
+.pilot-panel input[type="checkbox"] { width: auto; min-height: auto; display: inline; }
+.case-inbox-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  padding: .65rem 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.case-inbox-row:last-child { border-bottom: 0; }
+.case-inbox-row button { flex: none; }
+#workflow-form { margin-top: .75rem; }
+#workflow-form label:has(textarea) { flex: 1 0 min(100%, 14rem); }
+#original-csv { margin-top: .5rem; }
